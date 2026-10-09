@@ -18,6 +18,7 @@
             display: block;
         }
 
+        /* 1. HUD 金錢與狀態提示 */
         #hud {
             position: absolute;
             top: 10px;
@@ -29,6 +30,45 @@
             pointer-events: none;
         }
 
+        #prompt-text {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 1px 1px 3px black;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 15px;
+            display: none;
+        }
+
+        /* 2. 螢幕正中央準心 (動態變色) */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(0, 0, 0, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+            transition: transform 0.1s, background-color 0.1s;
+        }
+
+        /* 當準心瞄準可互動目標時，縮放並變色 */
+        #crosshair.active {
+            background-color: #00ff00;
+            transform: translate(-50%, -50%) scale(1.5);
+        }
+
+        /* 3. 虛擬搖桿 UI */
         #joystick-zone {
             position: absolute;
             bottom: 20px;
@@ -51,6 +91,7 @@
             border-radius: 50%;
         }
 
+        /* 4. 動作按鈕 */
         .action-btn {
             position: absolute;
             right: 20px;
@@ -69,11 +110,13 @@
             background: #0055ff;
         }
 
-        #btn-stock {
+        #btn-drop {
             bottom: 20px;
-            background: #00aa00;
+            background: #ff4444;
+            display: none;
         }
 
+        /* 5. POS 結帳介面 */
         #pos-ui {
             display: none;
             position: absolute;
@@ -86,6 +129,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            z-index: 20;
         }
 
         .pos-screen {
@@ -112,12 +156,14 @@
 <body>
 
     <div id="hud">金錢: $<span id="money-text">100.00</span></div>
+    <div id="prompt-text">瞄準提示</div>
+    <div id="crosshair"></div>
 
     <div id="joystick-zone">
         <div id="joystick-knob"></div>
     </div>
     <button id="btn-interact" class="action-btn">E / 互動</button>
-    <button id="btn-stock" class="action-btn">補貨</button>
+    <button id="btn-drop" class="action-btn">放下紙箱</button>
 
     <div id="pos-ui">
         <div class="pos-screen">
@@ -130,7 +176,9 @@
     </div>
 
     <script>
-        // 1. 初始化 3D 場景
+        // ==========================================
+        // 1. 初始化 3D 場景與攝影機
+        // ==========================================
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f0f0);
 
@@ -149,28 +197,60 @@
         const grid = new THREE.GridHelper(20, 20);
         scene.add(grid);
 
-        const shelf = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 3), new THREE.MeshLambertMaterial({ color: 0x0000ff }));
-        shelf.position.set(-2, 1, 0); scene.add(shelf);
+        // ==========================================
+        // 2. 創建可互動之物件 (標記 name 用於 Raycast 識別)
+        // ==========================================
+        const interactables = []; // 存放所有可以被瞄準互動的物件
 
-        const computer = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), new THREE.MeshLambertMaterial({ color: 0x008800 }));
-        computer.position.set(3, 0.75, 0); scene.add(computer);
+        // (1) 貨架 (Shelf)
+        const shelfGroup = new THREE.Group();
+        const shelfMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 3), new THREE.MeshLambertMaterial({ color: 0x335588 }));
+        shelfMesh.position.set(0, 1, 0);
+        shelfGroup.add(shelfMesh);
+        shelfGroup.position.set(-3, 0, -1);
+        shelfGroup.name = "shelf";
+        shelfGroup.userData = { stockedCount: 0 }; // 記錄上架的商品數量
+        scene.add(shelfGroup);
+        interactables.push(shelfMesh);
 
-        const counter = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 0.8), new THREE.MeshLambertMaterial({ color: 0xffd700 }));
-        counter.position.set(0, 0.75, 2); scene.add(counter);
+        // (2) 收銀檯 (Counter)
+        const counterGroup = new THREE.Group();
+        const counterMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 1), new THREE.MeshLambertMaterial({ color: 0xddaa22 }));
+        counterMesh.position.set(0, 0.5, 0);
+        counterGroup.add(counterMesh);
+        counterGroup.position.set(2, 0, 1);
+        counterGroup.name = "counter";
+        scene.add(counterGroup);
+        interactables.push(counterMesh);
 
-        let money = 100.00;
-        let inCheckout = false;
+        // (3) 地板上的商品紙箱 (Box)
+        function spawnBox(x, z) {
+            const boxGeo = new THREE.BoxGeometry(0.6, 0.5, 0.6);
+            const boxMat = new THREE.MeshLambertMaterial({ color: 0xc2b280 }); // 紙箱褐色
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            box.position.set(x, 0.25, z);
+            box.name = "box";
+            box.userData = { itemsLeft: 5 }; // 紙箱內裝有 5 個商品
+            scene.add(box);
+            interactables.push(box);
+            return box;
+        }
+        spawnBox(0, 0); // 在場景中央放一個紙箱
+
+        // 玩家手持狀態
+        let heldBox = null;
+
+        // ==========================================
+        // 3. 搖桿與視角旋轉控制
+        // ==========================================
         let moveDir = { x: 0, y: 0 };
-
-        // 2. 搖桿邏輯
         const zone = document.getElementById('joystick-zone');
         const knob = document.getElementById('joystick-knob');
         let joystickTouchId = null;
 
         zone.addEventListener('touchstart', (e) => {
             e.stopPropagation();
-            const t = e.changedTouches[0];
-            joystickTouchId = t.identifier;
+            joystickTouchId = e.changedTouches[0].identifier;
         });
 
         zone.addEventListener('touchmove', (e) => {
@@ -198,11 +278,9 @@
         zone.addEventListener('touchend', resetJoystick);
         zone.addEventListener('touchcancel', resetJoystick);
 
-        // 3. 視角旋轉 (右側觸控/單指滑動)
-        let cameraYaw = 0;
-        let cameraPitch = 0;
-        let lookTouchId = null;
-        let previousTouchX = 0, previousTouchY = 0;
+        // 視角旋轉 (右側觸控)
+        let cameraYaw = 0, cameraPitch = 0;
+        let lookTouchId = null, previousTouchX = 0, previousTouchY = 0;
 
         window.addEventListener('touchstart', (e) => {
             for (let t of e.changedTouches) {
@@ -219,11 +297,9 @@
                 if (t.identifier === lookTouchId) {
                     const deltaX = t.clientX - previousTouchX;
                     const deltaY = t.clientY - previousTouchY;
-
                     cameraYaw -= deltaX * 0.005;
                     cameraPitch -= deltaY * 0.005;
                     cameraPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, cameraPitch));
-
                     previousTouchX = t.clientX;
                     previousTouchY = t.clientY;
                 }
@@ -238,10 +314,124 @@
         window.addEventListener('touchend', resetLook);
         window.addEventListener('touchcancel', resetLook);
 
-        // 4. UI 互動
+        // ==========================================
+        // 4. 核心物理 Raycast 準心偵測與互動系統
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const centerPoint = new THREE.Vector2(0, 0); // 螢幕正中心點 (0,0)
+        let currentTarget = null; // 當前準心瞄準到的物件
+
+        const crosshair = document.getElementById('crosshair');
+        const promptText = document.getElementById('prompt-text');
+
+        function updateRaycast() {
+            // 從攝影機正中央向前方發射一條光線 (Ray)
+            raycaster.setFromCamera(centerPoint, camera);
+            const intersects = raycaster.intersectObjects(interactables, true);
+
+            if (intersects.length > 0 && intersects[0].distance < 3.5) { // 距離要在 3.5 米以內
+                let hitObj = intersects[0].object;
+
+                // 取得物件的父級標籤 (判斷是 shelf / counter / box)
+                let targetType = hitObj.name || (hitObj.parent ? hitObj.parent.name : "");
+
+                currentTarget = { object: hitObj, type: targetType, distance: intersects[0].distance };
+
+                // 改變準心外觀並顯示 UI 提示文字
+                crosshair.classList.add('active');
+                promptText.style.display = 'block';
+
+                if (targetType === "box" && !heldBox) {
+                    promptText.innerText = `[按互動] 拿起紙箱 (剩餘 ${hitObj.userData.itemsLeft} 件商品)`;
+                } else if (targetType === "shelf") {
+                    if (heldBox) {
+                        promptText.innerText = `[按互動] 補貨到貨架 (剩餘 ${heldBox.userData.itemsLeft} 件)`;
+                    } else {
+                        promptText.innerText = `貨架 (已補 ${hitObj.parent.userData.stockedCount} 件商品)`;
+                    }
+                } else if (targetType === "counter") {
+                    promptText.innerText = `[按互動] 開啟收銀 POS 系統`;
+                } else {
+                    crosshair.classList.remove('active');
+                    promptText.style.display = 'none';
+                    currentTarget = null;
+                }
+            } else {
+                crosshair.classList.remove('active');
+                promptText.style.display = 'none';
+                currentTarget = null;
+            }
+        }
+
+        // ==========================================
+        // 5. 互動與按鈕邏輯
+        // ==========================================
         document.getElementById('btn-interact').onclick = () => {
-            if (camera.position.distanceTo(counter.position) < 3) openCheckout();
+            if (!currentTarget) return; // 準心沒對準任何東西，不執行任何動作！
+
+            const { type, object } = currentTarget;
+
+            // 1. 拿起紙箱
+            if (type === "box" && !heldBox) {
+                heldBox = object;
+                camera.add(heldBox); // 將紙箱綁定到攝影機下 (跟隨視野)
+                heldBox.position.set(0.3, -0.3, -0.8); // 放到視角右下角
+                heldBox.rotation.set(0, 0, 0);
+
+                // 從場景互動列表中暫時移除，避免 Raycast 撞到自己
+                const idx = interactables.indexOf(heldBox);
+                if (idx > -1) interactables.splice(idx, 1);
+
+                document.getElementById('btn-drop').style.display = 'block';
+            }
+            // 2. 拿著紙箱補貨到貨架上
+            else if (type === "shelf" && heldBox) {
+                if (heldBox.userData.itemsLeft > 0) {
+                    heldBox.userData.itemsLeft--;
+                    object.parent.userData.stockedCount++;
+
+                    // 在貨架上生成一個小商品
+                    const itemGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                    const itemMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+                    const item = new THREE.Mesh(itemGeo, itemMat);
+
+                    // 動態計算排列位置
+                    const count = object.parent.userData.stockedCount;
+                    item.position.set(-0.4 + (count % 3) * 0.4, 0.3 + Math.floor(count / 3) * 0.3, 0.2);
+                    object.parent.add(item);
+
+                    if (heldBox.userData.itemsLeft === 0) {
+                        promptText.innerText = "紙箱已空！";
+                    }
+                }
+            }
+            // 3. 開啟收銀結帳
+            else if (type === "counter") {
+                openCheckout();
+            }
         };
+
+        // 放下紙箱按鈕邏輯
+        document.getElementById('btn-drop').onclick = () => {
+            if (heldBox) {
+                scene.add(heldBox); // 重新放回 3D 世界場景
+
+                // 計算前方放下的世界座標
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                heldBox.position.copy(camera.position).add(forward.multiplyScalar(1.2));
+                heldBox.position.y = 0.25; // 貼在地面上
+
+                interactables.push(heldBox); // 重新加入 Raycast 互動列表
+                heldBox = null;
+                document.getElementById('btn-drop').style.display = 'none';
+            }
+        };
+
+        // ==========================================
+        // 6. POS 結帳邏輯
+        // ==========================================
+        let money = 100.00;
+        let inCheckout = false;
 
         function openCheckout() {
             inCheckout = true;
@@ -264,11 +454,14 @@
             document.getElementById('pos-ui').style.display = 'none';
         }
 
-        // 5. 渲染與更新循環
+        // ==========================================
+        // 7. 渲染與主更新循環
+        // ==========================================
         function animate() {
             requestAnimationFrame(animate);
 
             if (!inCheckout) {
+                // (1) 移動與視角更新
                 const speed = 0.08;
                 const forwardX = -Math.sin(cameraYaw);
                 const forwardZ = -Math.cos(cameraYaw);
@@ -280,6 +473,9 @@
 
                 const euler = new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ');
                 camera.quaternion.setFromEuler(euler);
+
+                // (2) 每張畫面更新時執行準心 Raycast 物理檢測
+                updateRaycast();
             }
 
             renderer.render(scene, camera);
