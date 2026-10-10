@@ -18,7 +18,7 @@
             display: block;
         }
 
-        /* 1. HUD 金錢與狀態提示 */
+        /* HUD 金錢與狀態提示 */
         #hud {
             position: absolute;
             top: 10px;
@@ -48,7 +48,7 @@
             z-index: 5;
         }
 
-        /* 2. 螢幕正中央準心 */
+        /* 螢幕正中央準心 (動態變色) */
         #crosshair {
             position: absolute;
             top: 50%;
@@ -69,7 +69,7 @@
             transform: translate(-50%, -50%) scale(1.5);
         }
 
-        /* 3. 虛擬搖桿 UI */
+        /* 虛擬搖桿 UI */
         #joystick-zone {
             position: absolute;
             bottom: 20px;
@@ -92,7 +92,7 @@
             border-radius: 50%;
         }
 
-        /* 4. 動作按鈕 (預設 display: none 隱藏，對準物品時才顯示) */
+        /* 動作按鈕 (預設隱藏，對準物品時自動跳出) */
         .action-btn {
             position: absolute;
             right: 20px;
@@ -105,6 +105,7 @@
             border-radius: 10px;
             opacity: 0.9;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            z-index: 15;
         }
 
         #btn-interact {
@@ -119,7 +120,7 @@
             display: none;
         }
 
-        /* 5. 彈出 UI 系統 (POS & 電腦訂購) */
+        /* 通用彈出選單 UI */
         .modal-ui {
             display: none;
             position: absolute;
@@ -155,7 +156,7 @@
             font-weight: bold;
         }
 
-        /* 電腦訂購專用選單樣式 */
+        /* 電腦訂購專用樣式 */
         .order-item {
             display: flex;
             justify-content: space-between;
@@ -178,6 +179,8 @@
             margin-top: 8px;
         }
     </style>
+
+    <!-- 引入 Three.js 核心庫與 GLTF 載入器 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
@@ -192,7 +195,6 @@
         <div id="joystick-knob"></div>
     </div>
 
-    <!-- 互動按鈕：只有當準心瞄準物品時才會跳出來 -->
     <button id="btn-interact" class="action-btn">E / 互動</button>
     <button id="btn-drop" class="action-btn">放下紙箱</button>
 
@@ -203,417 +205,38 @@
             <p id="pos-total">總計: $0.00</p>
             <p id="pos-mode">付款方式: 刷卡</p>
             <div id="checkout-action-area"></div>
-            <button class="modal-btn" style="background:#ff4444; color:white;"
-                onclick="closeModal('pos-ui')">離開收銀</button>
+            <button id="btn-close-pos" class="modal-btn" style="background:#ff4444; color:white;">離開收銀</button>
         </div>
     </div>
 
-    <!-- 電腦商品訂購介面 -->
+    <!-- 電腦訂購介面 -->
     <div id="order-ui" class="modal-ui">
         <div class="modal-screen">
             <h2>🛒 商品進貨訂購單</h2>
 
             <div class="order-item">
                 <span>牛奶箱 (5入) - $20</span>
-                <button class="modal-btn" style="background:#0055ff; color:white;" onclick="addToCart('牛奶箱', 20)">+
-                    加入</button>
+                <button id="btn-buy-milk" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
             </div>
             <div class="order-item">
                 <span>洋芋片箱 (5入) - $15</span>
-                <button class="modal-btn" style="background:#0055ff; color:white;" onclick="addToCart('洋芋片箱', 15)">+
-                    加入</button>
+                <button id="btn-buy-chips" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
             </div>
             <div class="order-item">
                 <span>飲料箱 (5入) - $18</span>
-                <button class="modal-btn" style="background:#0055ff; color:white;" onclick="addToCart('飲料箱', 18)">+
-                    加入</button>
+                <button id="btn-buy-drink" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
             </div>
 
             <div id="cart-list">已選清單: 無</div>
             <h3 id="order-total" style="color:#00ff00;">總計: $0.00</h3>
 
-            <button class="modal-btn" style="background:#00aa00; color:white;" onclick="checkoutOrder()">確認付款下單</button>
-            <button class="modal-btn" style="background:#888; color:white;"
-                onclick="closeModal('order-ui')">關閉電腦</button>
+            <button id="btn-order-checkout" class="modal-btn" style="background:#00aa00; color:white;">確認付款下單</button>
+            <button id="btn-close-order" class="modal-btn" style="background:#888; color:white;">關閉電腦</button>
         </div>
     </div>
 
-    <script>
-        // ==========================================
-        // 1. 初始化 3D 場景
-        // ==========================================
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
-
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.8, 5);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 10, 7.5);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
-
-        const grid = new THREE.GridHelper(20, 20);
-        scene.add(grid);
-
-        const loader = new THREE.GLTFLoader();
-        const interactables = []; // 所有可互動物件清單
-
-        // ==========================================
-        // 2. 放置場景物件 (貨架、收銀檯、電腦、紙箱)
-        // ==========================================
-
-        // (1) 貨架 (Shelf)
-        loader.load('shelf.glb', (gltf) => {
-            const shelf = gltf.scene;
-            shelf.position.set(-3, 0, -1);
-            shelf.name = "shelf";
-            shelf.userData = { stockedCount: 0 };
-            shelf.traverse(c => { if (c.isMesh) { c.name = "shelf"; interactables.push(c); } });
-            scene.add(shelf);
-        }, undefined, () => {
-            const shelfMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 3), new THREE.MeshLambertMaterial({ color: 0x335588 }));
-            shelfMesh.position.set(-3, 1, -1);
-            shelfMesh.name = "shelf";
-            shelfMesh.userData = { stockedCount: 0 };
-            scene.add(shelfMesh);
-            interactables.push(shelfMesh);
-        });
-
-        // (2) 收銀檯 (Counter)
-        loader.load('counter.glb', (gltf) => {
-            const counter = gltf.scene;
-            counter.position.set(2, 0, 1);
-            counter.name = "counter";
-            counter.traverse(c => { if (c.isMesh) { c.name = "counter"; interactables.push(c); } });
-            scene.add(counter);
-        }, undefined, () => {
-            const counterMesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 1), new THREE.MeshLambertMaterial({ color: 0xddaa22 }));
-            counterMesh.position.set(2, 0.5, 1);
-            counterMesh.name = "counter";
-            scene.add(counterMesh);
-            interactables.push(counterMesh);
-        });
-
-        // (3) 電腦 (Computer - 用於進貨訂購)
-        const compMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({ color: 0x00aa88 }));
-        compMesh.position.set(2, 1.2, -2);
-        compMesh.name = "computer";
-        scene.add(compMesh);
-        interactables.push(compMesh);
-
-        // 生成紙箱函數
-        let heldBox = null;
-        function spawnBox(name, x, z) {
-            loader.load('box.glb', (gltf) => {
-                const box = gltf.scene;
-                box.position.set(x, 0, z);
-                box.name = "box";
-                box.userData = { itemName: name, itemsLeft: 5 };
-                box.traverse(c => { if (c.isMesh) c.name = "box"; });
-                scene.add(box);
-                interactables.push(box);
-            }, undefined, () => {
-                const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshLambertMaterial({ color: 0xc2b280 }));
-                box.position.set(x, 0.25, z);
-                box.name = "box";
-                box.userData = { itemName: name, itemsLeft: 5 };
-                scene.add(box);
-                interactables.push(box);
-            });
-        }
-        spawnBox("初始牛奶箱", 0, 0); // 初始生成一個紙箱
-
-        // ==========================================
-        // 3. 移動搖桿與觸控旋轉視角
-        // ==========================================
-        let moveDir = { x: 0, y: 0 };
-        const zone = document.getElementById('joystick-zone');
-        const knob = document.getElementById('joystick-knob');
-        let joystickTouchId = null;
-
-        zone.addEventListener('touchstart', (e) => {
-            e.stopPropagation();
-            joystickTouchId = e.changedTouches[0].identifier;
-        });
-
-        zone.addEventListener('touchmove', (e) => {
-            e.stopPropagation();
-            for (let t of e.changedTouches) {
-                if (t.identifier === joystickTouchId) {
-                    const rect = zone.getBoundingClientRect();
-                    let x = t.clientX - rect.left - 70;
-                    let y = t.clientY - rect.top - 70;
-                    const dist = Math.hypot(x, y);
-                    if (dist > 45) { x = (x / dist) * 45; y = (y / dist) * 45; }
-                    knob.style.transform = `translate(${x}px, ${y}px)`;
-                    moveDir.x = x / 45;
-                    moveDir.y = y / 45;
-                }
-            }
-        });
-
-        const resetJoystick = (e) => {
-            e.stopPropagation();
-            knob.style.transform = `translate(0px, 0px)`;
-            moveDir = { x: 0, y: 0 };
-            joystickTouchId = null;
-        };
-        zone.addEventListener('touchend', resetJoystick);
-        zone.addEventListener('touchcancel', resetJoystick);
-
-        // 視角旋轉
-        let cameraYaw = 0, cameraPitch = 0;
-        let lookTouchId = null, previousTouchX = 0, previousTouchY = 0;
-
-        window.addEventListener('touchstart', (e) => {
-            for (let t of e.changedTouches) {
-                if (t.clientX > window.innerWidth / 3 && lookTouchId === null) {
-                    lookTouchId = t.identifier;
-                    previousTouchX = t.clientX;
-                    previousTouchY = t.clientY;
-                }
-            }
-        });
-
-        window.addEventListener('touchmove', (e) => {
-            for (let t of e.changedTouches) {
-                if (t.identifier === lookTouchId) {
-                    const deltaX = t.clientX - previousTouchX;
-                    const deltaY = t.clientY - previousTouchY;
-                    cameraYaw -= deltaX * 0.005;
-                    cameraPitch -= deltaY * 0.005;
-                    cameraPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, cameraPitch));
-                    previousTouchX = t.clientX;
-                    previousTouchY = t.clientY;
-                }
-            }
-        });
-
-        const resetLook = (e) => {
-            for (let t of e.changedTouches) {
-                if (t.identifier === lookTouchId) lookTouchId = null;
-            }
-        };
-        window.addEventListener('touchend', resetLook);
-        window.addEventListener('touchcancel', resetLook);
-
-        // ==========================================
-        // 4. Raycast 物理檢測 (控制按紐彈出)
-        // ==========================================
-        const raycaster = new THREE.Raycaster();
-        const centerPoint = new THREE.Vector2(0, 0);
-        let currentTarget = null;
-
-        const crosshair = document.getElementById('crosshair');
-        const promptText = document.getElementById('prompt-text');
-        const btnInteract = document.getElementById('btn-interact');
-
-        function updateRaycast() {
-            raycaster.setFromCamera(centerPoint, camera);
-            const intersects = raycaster.intersectObjects(interactables, true);
-
-            if (intersects.length > 0 && intersects[0].distance < 3.5) {
-                let hitObj = intersects[0].object;
-
-                let rootObj = hitObj;
-                while (rootObj.parent && rootObj.parent !== scene && !rootObj.name) {
-                    rootObj = rootObj.parent;
-                }
-                let targetType = rootObj.name || hitObj.name;
-
-                currentTarget = { object: rootObj, hitMesh: hitObj, type: targetType };
-
-                // 🌟 瞄準物品時：改變準心外觀、顯示提示文字，並「顯示互動按鈕」
-                crosshair.classList.add('active');
-                promptText.style.display = 'block';
-                btnInteract.style.display = 'block'; // 跳出互動按鈕！
-
-                if (targetType === "box" && !heldBox) {
-                    promptText.innerText = `[拿起] ${rootObj.userData.itemName || '紙箱'} (剩 ${rootObj.userData.itemsLeft || 5} 件)`;
-                } else if (targetType === "shelf") {
-                    promptText.innerText = heldBox ? `[補貨] 將商品上架` : `貨架`;
-                } else if (targetType === "counter") {
-                    promptText.innerText = `[開啟] 收銀 POS 系統`;
-                } else if (targetType === "computer") {
-                    promptText.innerText = `[開啟] 商品訂購電腦`;
-                } else {
-                    hideInteraction();
-                }
-            } else {
-                hideInteraction();
-            }
-        }
-
-        // 未對準物品時隱藏按鈕與提示
-        function hideInteraction() {
-            crosshair.classList.remove('active');
-            promptText.style.display = 'none';
-            btnInteract.style.display = 'none'; // 隱藏互動按鈕
-            currentTarget = null;
-        }
-
-        // ==========================================
-        // 5. 點擊互動執行邏輯
-        // ==========================================
-        btnInteract.onclick = () => {
-            if (!currentTarget) return;
-
-            const { type, object } = currentTarget;
-
-            // (1) 拿起紙箱
-            if (type === "box" && !heldBox) {
-                heldBox = object;
-                camera.add(heldBox);
-                heldBox.position.set(0.3, -0.3, -0.8);
-                heldBox.rotation.set(0, 0, 0);
-
-                const idx = interactables.indexOf(object);
-                if (idx > -1) interactables.splice(idx, 1);
-
-                document.getElementById('btn-drop').style.display = 'block';
-            }
-            // (2) 補貨到貨架
-            else if (type === "shelf" && heldBox) {
-                if (heldBox.userData.itemsLeft > 0) {
-                    heldBox.userData.itemsLeft--;
-
-                    const item = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshLambertMaterial({ color: 0xff0000 }));
-                    item.position.set((Math.random() - 0.5) * 1, 0.5, (Math.random() - 0.5) * 1);
-                    object.add(item);
-                }
-            }
-            // (3) 開啟 POS 結帳
-            else if (type === "counter") {
-                openModal('pos-ui');
-                setupPOS();
-            }
-            // (4) 開啟電腦訂購系統
-            else if (type === "computer") {
-                openModal('order-ui');
-            }
-        };
-
-        // 放下紙箱按鈕
-        document.getElementById('btn-drop').onclick = () => {
-            if (heldBox) {
-                scene.add(heldBox);
-                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                heldBox.position.copy(camera.position).add(forward.multiplyScalar(1.2));
-                heldBox.position.y = 0;
-
-                interactables.push(heldBox);
-                heldBox = null;
-                document.getElementById('btn-drop').style.display = 'none';
-            }
-        };
-
-        // ==========================================
-        // 6. 電腦進貨訂購選單邏輯
-        // ==========================================
-        let money = 100.00;
-        let inUI = false;
-        let cart = [];
-        let cartTotal = 0;
-
-        function addToCart(itemName, price) {
-            cart.push({ name: itemName, price: price });
-            cartTotal += price;
-            updateCartUI();
-        }
-
-        function updateCartUI() {
-            const listEl = document.getElementById('cart-list');
-            if (cart.length === 0) {
-                listEl.innerText = "已選清單: 無";
-            } else {
-                listEl.innerHTML = cart.map(item => `<div>• ${item.name} - $${item.price}</div>`).join('');
-            }
-            document.getElementById('order-total').innerText = `總計: $${cartTotal}.00`;
-        }
-
-        function checkoutOrder() {
-            if (cart.length === 0) return alert('購物車是空的！');
-            if (money < cartTotal) return alert('金錢不足！');
-
-            money -= cartTotal;
-            document.getElementById('money-text').innerText = money.toFixed(2);
-
-            // 下單成功，在門口生成相應的紙箱
-            cart.forEach((item, index) => {
-                spawnBox(item.name, 1 + index * 0.8, 3);
-            });
-
-            alert(`成功進貨！${cart.length} 個紙箱已送到門口外。`);
-
-            // 清空購物車並關閉選單
-            cart = [];
-            cartTotal = 0;
-            updateCartUI();
-            closeModal('order-ui');
-        }
-
-        // ==========================================
-        // 7. 通用 UI 彈窗控制
-        // ==========================================
-        function openModal(id) {
-            inUI = true;
-            document.getElementById(id).style.display = 'flex';
-        }
-
-        function closeModal(id) {
-            inUI = false;
-            document.getElementById(id).style.display = 'none';
-        }
-
-        function setupPOS() {
-            const total = (Math.floor(Math.random() * 5) + 1) * 5;
-            document.getElementById('pos-total').innerText = `總計: $${total}.00`;
-            document.getElementById('checkout-action-area').innerHTML = `<button class="modal-btn" style="background:#00aa00; color:white;" onclick="finishCheckout(${total})">完成結帳</button>`;
-        }
-
-        function finishCheckout(amount) {
-            money += amount;
-            document.getElementById('money-text').innerText = money.toFixed(2);
-            closeModal('pos-ui');
-        }
-
-        // ==========================================
-        // 8. 主更新循環
-        // ==========================================
-        function animate() {
-            requestAnimationFrame(animate);
-
-            if (!inUI) {
-                const speed = 0.08;
-                const forwardX = -Math.sin(cameraYaw);
-                const forwardZ = -Math.cos(cameraYaw);
-                const rightX = Math.cos(cameraYaw);
-                const rightZ = -Math.sin(cameraYaw);
-
-                camera.position.x += (forwardX * (-moveDir.y) + rightX * moveDir.x) * speed;
-                camera.position.z += (forwardZ * (-moveDir.z ? -moveDir.y : -moveDir.y) + rightZ * moveDir.x) * speed;
-
-                const euler = new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ');
-                camera.quaternion.setFromEuler(euler);
-
-                updateRaycast(); // 每張畫面執行 Raycast 判斷按鈕顯示與否
-            }
-
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+    <!-- 主 JS 模組腳本 (必須使用 type="module") -->
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>
