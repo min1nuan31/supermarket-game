@@ -228,11 +228,11 @@
             <h1>🛒 超市模擬器</h1>
             <div id="main-menu-options">
                 <button class="modal-btn" style="background: #00adb5; color: white;"
-                    onclick="showLoginInputs('register')">📝 掛名行商 (申請牌照/註冊)</button>
+                    onclick="showLoginInputs('register')">📝 申請牌照 </button>
                 <button class="modal-btn" style="background: #393e46; color: white;"
-                    onclick="showLoginInputs('login')">🔑 掛名行商 (已有牌照/登入)</button>
+                    onclick="showLoginInputs('login')">🔑 已有牌照 掛名行商 </button>
                 <button class="modal-btn" style="background: #ff5722; color: white;" onclick="startAnonymousGame()">🚀
-                    匿名大佬 (直接進入遊戲)</button>
+                    匿名大佬 </button>
             </div>
 
             <!-- 帳密輸入表單 (預設隱藏) -->
@@ -310,12 +310,19 @@
         }
 
         function submitAuth() {
-            const user = document.getElementById('username-input').value.trim();
-            const pass = document.getElementById('password-input').value.trim();
-            if (!user || !pass) {
-                alert('請完整輸入帳號與密碼！');
-                return;
-            }
+                const user = document.getElementById('username-input').value.trim();
+                const pass = document.getElementById('password-input').value.trim();
+                if (!user || !pass) {
+                    alert('請完整輸入帳號與密碼！');
+                    return;
+                }
+
+                // 驗證使用者名稱：只允許中文、英文大小寫、數字、點 (.) 與底線 (_)
+                const userRegex = /^[a-zA-Z0-9\u4e00-\u9fa5._]+$/;
+                if (!userRegex.test(user)) {
+                    alert('使用者名稱只能包含中文、英文大小寫、數字、點 (.) 與底線 (_)！');
+                    return;
+                }
             // 目前先用 localStorage 模擬前端帳號儲存與讀取 (符合流程圖邏輯)
             if (authMode === 'register') {
                 if (localStorage.getItem('sm_user_' + user)) {
