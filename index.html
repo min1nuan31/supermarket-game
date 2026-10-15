@@ -12,13 +12,25 @@
             font-family: Arial, sans-serif;
             user-select: none;
             touch-action: none;
+            background: #111;
         }
 
         canvas {
             display: block;
         }
 
-        /* HUD 金錢與狀態提示 */
+        /* 遊戲 HUD 介面 (預設隱藏，登入後顯示) */
+        #game-hud {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
         #hud {
             position: absolute;
             top: 10px;
@@ -28,7 +40,6 @@
             font-weight: bold;
             text-shadow: 1px 1px 2px black;
             pointer-events: none;
-            z-index: 5;
         }
 
         #prompt-text {
@@ -40,15 +51,13 @@
             font-size: 18px;
             font-weight: bold;
             text-shadow: 1px 1px 3px black;
-            pointer-events: none;
             background: rgba(0, 0, 0, 0.6);
             padding: 6px 16px;
             border-radius: 15px;
             display: none;
-            z-index: 5;
         }
 
-        /* 螢幕正中央準心 (動態變色) */
+        /* 螢幕正中央準心 */
         #crosshair {
             position: absolute;
             top: 50%;
@@ -69,30 +78,31 @@
             transform: translate(-50%, -50%) scale(1.5);
         }
 
-        /* 虛擬搖桿 UI */
+        /* 虛擬搖桿與動作按鈕 */
+        /* 動態虛擬搖桿 (覆蓋左半螢幕) */
         #joystick-zone {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 140px;
-            height: 140px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
+            top: 0;
+            left: 0;
+            width: 50vw;
+            height: 100vh;
             touch-action: none;
-            border: 2px solid rgba(255, 255, 255, 0.4);
+            display: none;
+            pointer-events: auto;
+            z-index: 10;
         }
 
         #joystick-knob {
             position: absolute;
-            top: 45px;
-            left: 45px;
             width: 50px;
             height: 50px;
             background: rgba(0, 0, 0, 0.5);
             border-radius: 50%;
+            display: none;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(255, 255, 255, 0.4);
         }
 
-        /* 動作按鈕 (預設隱藏，對準物品時自動跳出) */
         .action-btn {
             position: absolute;
             right: 20px;
@@ -106,18 +116,18 @@
             opacity: 0.9;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
             z-index: 15;
+            display: none;
+            pointer-events: auto;
         }
 
         #btn-interact {
             bottom: 90px;
             background: #0055ff;
-            display: none;
         }
 
         #btn-drop {
             bottom: 20px;
             background: #ff4444;
-            display: none;
         }
 
         /* 通用彈出選單 UI */
@@ -134,21 +144,24 @@
             align-items: center;
             justify-content: center;
             z-index: 20;
+            pointer-events: auto;
         }
 
         .modal-screen {
             background: #222;
-            padding: 20px;
+            padding: 25px;
             border-radius: 12px;
             width: 85%;
-            max-width: 450px;
+            max-width: 400px;
             text-align: center;
             border: 1px solid #444;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
         }
 
         .modal-btn {
-            margin: 8px;
-            padding: 10px 18px;
+            margin: 8px 0;
+            padding: 12px;
+            width: 100%;
             font-size: 16px;
             border: none;
             border-radius: 6px;
@@ -156,52 +169,99 @@
             font-weight: bold;
         }
 
-        /* 電腦訂購專用樣式 */
-        .order-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #333;
-            margin: 8px 0;
+        .modal-input {
+            width: 100%;
             padding: 10px;
-            border-radius: 8px;
+            margin: 8px 0;
+            background: #111;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
         }
 
-        #cart-list {
-            max-height: 120px;
-            overflow-y: auto;
-            text-align: left;
-            background: #111;
-            padding: 8px;
-            border-radius: 6px;
-            font-size: 14px;
-            color: #aaa;
-            margin-top: 8px;
+        /* ================= 登入畫面專屬樣式 ================= */
+        #login-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: white;
+        }
+
+        .login-card {
+            background: #222831;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            border: 1px solid #393e46;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .login-card h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #00adb5;
         }
     </style>
 
-    <!-- 引入 Three.js 核心庫與 GLTF 載入器 -->
+    <!-- Three.js 核心與載入器 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 
 <body>
 
-    <div id="hud">金錢: $<span id="money-text">100.00</span></div>
-    <div id="prompt-text">瞄準提示</div>
-    <div id="crosshair"></div>
+    <!-- 1. 遊戲登入/選擇畫面 (對應流程圖頂部) -->
+    <div id="login-screen">
+        <div class="login-card">
+            <h1>🛒 超市模擬器</h1>
+            <div id="main-menu-options">
+                <button class="modal-btn" style="background: #00adb5; color: white;"
+                    onclick="showLoginInputs('register')">📝 掛名行商 (申請牌照/註冊)</button>
+                <button class="modal-btn" style="background: #393e46; color: white;"
+                    onclick="showLoginInputs('login')">🔑 掛名行商 (已有牌照/登入)</button>
+                <button class="modal-btn" style="background: #ff5722; color: white;" onclick="startAnonymousGame()">🚀
+                    匿名大佬 (直接進入遊戲)</button>
+            </div>
 
-    <div id="joystick-zone">
-        <div id="joystick-knob"></div>
+            <!-- 帳密輸入表單 (預設隱藏) -->
+            <div id="auth-form-area" style="display: none;">
+                <input type="text" id="username-input" class="modal-input" placeholder="請輸入 User name (帳號)">
+                <input type="password" id="password-input" class="modal-input" placeholder="請輸入密碼">
+                <button id="auth-submit-btn" class="modal-btn" style="background: #00aa00; color: white;"
+                    onclick="submitAuth()">確認送出</button>
+                <button class="modal-btn" style="background: #666; color: white;" onclick="backToMainMenu()">返回</button>
+            </div>
+        </div>
     </div>
 
-    <button id="btn-interact" class="action-btn">E / 互動</button>
-    <button id="btn-drop" class="action-btn">放下紙箱</button>
+    <!-- 2. 遊戲主 HUD 介面 -->
+    <div id="game-hud">
+        <div id="hud">金錢: $<span id="money-text">100.00</span> | <span id="day-text">Day 1, 22:00</span></div>
+        <div id="prompt-text">瞄準提示</div>
+        <div id="crosshair"></div>
+        <div id="joystick-zone">
+            <div id="joystick-knob"></div>
+        </div>
+        <button id="btn-interact" class="action-btn">E / 互動</button>
+        <button id="btn-drop" class="action-btn">放下紙箱</button>
+    </div>
 
     <!-- POS 結帳介面 -->
     <div id="pos-ui" class="modal-ui">
         <div class="modal-screen">
-            <h2>--- POS 結帳系統 ---</h2>
+            <h2>--- POS 收銀系統 ---</h2>
             <p id="pos-total">總計: $0.00</p>
             <p id="pos-mode">付款方式: 刷卡</p>
             <div id="checkout-action-area"></div>
@@ -213,30 +273,92 @@
     <div id="order-ui" class="modal-ui">
         <div class="modal-screen">
             <h2>🛒 商品進貨訂購單</h2>
-
-            <div class="order-item">
+            <div class="order-item"
+                style="display:flex; justify-content:space-between; margin:8px 0; background:#333; padding:8px; border-radius:6px;">
                 <span>牛奶箱 (5入) - $20</span>
-                <button id="btn-buy-milk" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
+                <button id="btn-buy-milk" class="modal-btn"
+                    style="background:#0055ff; color:white; width:auto; padding:5px 10px;">+ 加入</button>
             </div>
-            <div class="order-item">
+            <div class="order-item"
+                style="display:flex; justify-content:space-between; margin:8px 0; background:#333; padding:8px; border-radius:6px;">
                 <span>洋芋片箱 (5入) - $15</span>
-                <button id="btn-buy-chips" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
+                <button id="btn-buy-chips" class="modal-btn"
+                    style="background:#0055ff; color:white; width:auto; padding:5px 10px;">+ 加入</button>
             </div>
-            <div class="order-item">
-                <span>飲料箱 (5入) - $18</span>
-                <button id="btn-buy-drink" class="modal-btn" style="background:#0055ff; color:white;">+ 加入</button>
-            </div>
-
-            <div id="cart-list">已選清單: 無</div>
+            <div id="cart-list"
+                style="background:#111; padding:8px; border-radius:6px; font-size:14px; color:#aaa; margin-top:8px; text-align:left;">
+                已選清單: 無</div>
             <h3 id="order-total" style="color:#00ff00;">總計: $0.00</h3>
-
             <button id="btn-order-checkout" class="modal-btn" style="background:#00aa00; color:white;">確認付款下單</button>
             <button id="btn-close-order" class="modal-btn" style="background:#888; color:white;">關閉電腦</button>
         </div>
     </div>
 
-    <!-- 主 JS 模組腳本 (必須使用 type="module") -->
-    <script type="module" src="js/main.js"></script>
+    <!-- 登入邏輯與主程式入口 -->
+    <script>
+        let authMode = '';
+        function showLoginInputs(mode) {
+            authMode = mode;
+            document.getElementById('main-menu-options').style.display = 'none';
+            document.getElementById('auth-form-area').style.display = 'block';
+            document.getElementById('auth-submit-btn').innerText = (mode === 'register') ? '申請牌照並進入' : '登入並接續進度';
+        }
+
+        function backToMainMenu() {
+            document.getElementById('main-menu-options').style.display = 'block';
+            document.getElementById('auth-form-area').style.display = 'none';
+        }
+
+        function submitAuth() {
+            const user = document.getElementById('username-input').value.trim();
+            const pass = document.getElementById('password-input').value.trim();
+            if (!user || !pass) {
+                alert('請完整輸入帳號與密碼！');
+                return;
+            }
+            // 目前先用 localStorage 模擬前端帳號儲存與讀取 (符合流程圖邏輯)
+            if (authMode === 'register') {
+                if (localStorage.getItem('sm_user_' + user)) {
+                    alert('此帳號名稱已被註冊過！');
+                    return;
+                }
+                localStorage.setItem('sm_user_' + user, JSON.stringify({ pass: pass, money: 100 }));
+                alert(`📝 牌照申請成功！歡迎來到超市，${user}`);
+            } else {
+                const savedData = localStorage.getItem('sm_user_' + user);
+                if (!savedData) {
+                    alert('找不到此帳號，請先申請牌照！');
+                    return;
+                }
+                const parsed = JSON.parse(savedData);
+                if (parsed.pass !== pass) {
+                    alert('密碼錯誤！');
+                    return;
+                }
+                alert(`歡迎回來，${user}！已成功載入您的遊戲進度。`);
+            }
+            launchGame();
+        }
+
+        function startAnonymousGame() {
+            alert('🚀 以匿名大佬身分進入遊戲（新手教學模式）');
+            launchGame();
+        }
+
+        function launchGame() {
+            // 隱藏登入畫面，顯示遊戲 HUD 與控制搖桿
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-hud').style.display = 'block';
+            document.getElementById('joystick-zone').style.display = 'block';
+            document.getElementById('btn-interact').style.display = 'block';
+
+            // 觸發載入主 3D 遊戲腳本
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = 'js/main.js';
+            document.body.appendChild(script);
+        }
+    </script>
 </body>
 
 </html>
