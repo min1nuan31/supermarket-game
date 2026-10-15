@@ -78,8 +78,7 @@
             transform: translate(-50%, -50%) scale(1.5);
         }
 
-        /* 虛擬搖桿與動作按鈕 */
-        /* 動態虛擬搖桿 (覆蓋左半螢幕) */
+        /* 動態虛擬搖桿 (覆蓋左半螢幕，隨按隨出現) */
         #joystick-zone {
             position: absolute;
             top: 0;
@@ -310,20 +309,21 @@
         }
 
         function submitAuth() {
-                const user = document.getElementById('username-input').value.trim();
-                const pass = document.getElementById('password-input').value.trim();
-                if (!user || !pass) {
-                    alert('請完整輸入帳號與密碼！');
-                    return;
-                }
+            const user = document.getElementById('username-input').value.trim();
+            const pass = document.getElementById('password-input').value.trim();
+            if (!user || !pass) {
+                alert('請完整輸入帳號與密碼！');
+                return;
+            }
 
-                // 驗證使用者名稱：只允許中文、英文大小寫、數字、點 (.) 與底線 (_)
-                const userRegex = /^[a-zA-Z0-9\u4e00-\u9fa5._]+$/;
-                if (!userRegex.test(user)) {
-                    alert('使用者名稱只能包含中文、英文大小寫、數字、點 (.) 與底線 (_)！');
-                    return;
-                }
-            // 目前先用 localStorage 模擬前端帳號儲存與讀取 (符合流程圖邏輯)
+            // 驗證使用者名稱：只允許中文、英文大小寫、數字、點 (.) 與底線 (_)
+            const userRegex = /^[a-zA-Z0-9\u4e00-\u9fa5._]+$/;
+            if (!userRegex.test(user)) {
+                alert('使用者名稱只能包含中文、英文大小寫、數字、點 (.) 與底線 (_)！');
+                return;
+            }
+
+            // 本地端帳號儲存與讀取 (LocalStorage)
             if (authMode === 'register') {
                 if (localStorage.getItem('sm_user_' + user)) {
                     alert('此帳號名稱已被註冊過！');
