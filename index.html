@@ -217,21 +217,23 @@
     <!-- Three.js 核心與載入器 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Supabase 雲端資料庫 SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
-    <!-- 1. 遊戲登入/選擇畫面 (對應流程圖頂部) -->
+    <!-- 1. 遊戲登入/選擇畫面 -->
     <div id="login-screen">
         <div class="login-card">
             <h1>🛒 超市模擬器</h1>
             <div id="main-menu-options">
                 <button class="modal-btn" style="background: #00adb5; color: white;"
-                    onclick="showLoginInputs('register')">📝 申請牌照 </button>
+                    onclick="showLoginInputs('register')">📝 申請雲端牌照 </button>
                 <button class="modal-btn" style="background: #393e46; color: white;"
-                    onclick="showLoginInputs('login')">🔑 已有牌照 掛名行商 </button>
+                    onclick="showLoginInputs('login')">🔑 雲端掛名行商登入 </button>
                 <button class="modal-btn" style="background: #ff5722; color: white;" onclick="startAnonymousGame()">🚀
-                    匿名大佬 </button>
+                    匿名大佬 (單機模式) </button>
             </div>
 
             <!-- 帳密輸入表單 (預設隱藏) -->
@@ -293,14 +295,19 @@
         </div>
     </div>
 
-    <!-- 登入邏輯與主程式入口 -->
+    <!-- 雲端與登入邏輯 -->
     <script>
+        // 初始化 Supabase 雲端連線
+        const SUPABASE_URL = 'https://nnsynrklcujezcddaemp.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_5uuftZtmDFH9Zup_3aZYEFA_VUBZv...'; // 請替換成你的完整 publishable key
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         let authMode = '';
         function showLoginInputs(mode) {
             authMode = mode;
             document.getElementById('main-menu-options').style.display = 'none';
             document.getElementById('auth-form-area').style.display = 'block';
-            document.getElementById('auth-submit-btn').innerText = (mode === 'register') ? '申請牌照並進入' : '登入並接續進度';
+            document.getElementById('auth-submit-btn').innerText = (mode === 'register') ? '向雲端申請牌照' : '從雲端登入';
         }
 
         function backToMainMenu() {
@@ -308,7 +315,7 @@
             document.getElementById('auth-form-area').style.display = 'none';
         }
 
-        function submitAuth() {
+        async function submitAuth() {
             const user = document.getElementById('username-input').value.trim();
             const pass = document.getElementById('password-input').value.trim();
             if (!user || !pass) {
@@ -323,32 +330,62 @@
                 return;
             }
 
-            // 本地端帳號儲存與讀取 (LocalStorage)
             if (authMode === 'register') {
-                if (localStorage.getItem('sm_user_' + user)) {
-                    alert('此帳號名稱已被註冊過！');
+                // 1. 檢查雲端是否已有此帳號
+                const { data: existing, error: checkError } = await supabase
+                    .from('game_saves')
+                    .select('username')
+                    .eq('username', user)
+                    .maybeSingle();
+
+                if (existing) {
+                    alert('此雲端帳號名稱已被註冊過！');
                     return;
                 }
-                localStorage.setItem('sm_user_' + user, JSON.stringify({ pass: pass, money: 100 }));
-                alert(`📝 牌照申請成功！歡迎來到超市，${user}`);
+
+                // 2. 寫入雲端資料庫
+                const initialSaveData = { money: 100, day: 1 };
+                const { error: insertError } = await supabase
+                    .from('game_saves')
+                    .insert([{ username: user, password: pass, save_data: initialSaveData }]);
+
+                if (insertError) {
+                    alert('雲端註冊失敗：' + insertError.message);
+                    return;
+                }
+                alert(`📝 雲端牌照申請成功！歡迎來到超市，${user}`);
+                window.playerSaveData = initialSaveData;
+                window.currentUsername = user;
             } else {
-                const savedData = localStorage.getItem('sm_user_' + user);
-                if (!savedData) {
-                    alert('找不到此帳號，請先申請牌照！');
+                // 1. 從雲端資料庫抓取帳號資料
+                const { data, error } = await supabase
+                    .from('game_saves')
+                    .select('*')
+                    .eq('username', user)
+                    .maybeSingle();
+
+                if (error || !data) {
+                    alert('找不到此雲端帳號，請先申請牌照！');
                     return;
                 }
-                const parsed = JSON.parse(savedData);
-                if (parsed.pass !== pass) {
+
+                if (data.password !== pass) {
                     alert('密碼錯誤！');
                     return;
                 }
-                alert(`歡迎回來，${user}！已成功載入您的遊戲進度。`);
+
+                // 2. 成功登入，載入雲端存檔
+                window.playerSaveData = data.save_data || { money: 100, day: 1 };
+                window.currentUsername = user;
+                alert(`歡迎回來，${user}！已從雲端成功載入您的遊戲進度。`);
             }
             launchGame();
         }
 
         function startAnonymousGame() {
-            alert('🚀 以匿名大佬身分進入遊戲（新手教學模式）');
+            alert('🚀 以匿名大佬身分進入遊戲（僅限本機單機遊玩）');
+            window.playerSaveData = { money: 100, day: 1 };
+            window.currentUsername = null;
             launchGame();
         }
 
@@ -358,6 +395,11 @@
             document.getElementById('game-hud').style.display = 'block';
             document.getElementById('joystick-zone').style.display = 'block';
             document.getElementById('btn-interact').style.display = 'block';
+
+            // 更新 HUD 顯示的金錢
+            if (window.playerSaveData && window.playerSaveData.money !== undefined) {
+                document.getElementById('money-text').innerText = window.playerSaveData.money.toFixed(2);
+            }
 
             // 觸發載入主 3D 遊戲腳本
             const script = document.createElement('script');
