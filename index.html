@@ -297,10 +297,10 @@
 
     <!-- 雲端與登入邏輯 -->
     <script>
-        // 初始化 Supabase 雲端連線
+        // 初始化 Supabase 雲端連線 (變數改名為 dbClient 避免衝突)
         const SUPABASE_URL = 'https://nnsynrklcujezcddaemp.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_5uuftZtmDFH9Zup_3aZYEFA_VUBZv...'; // 請替換成你的完整 publishable key
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let authMode = '';
         function showLoginInputs(mode) {
@@ -332,7 +332,7 @@
 
             if (authMode === 'register') {
                 // 1. 檢查雲端是否已有此帳號
-                const { data: existing, error: checkError } = await supabase
+                const { data: existing, error: checkError } = await dbClient
                     .from('game_saves')
                     .select('username')
                     .eq('username', user)
@@ -345,7 +345,7 @@
 
                 // 2. 寫入雲端資料庫
                 const initialSaveData = { money: 100, day: 1 };
-                const { error: insertError } = await supabase
+                const { error: insertError } = await dbClient
                     .from('game_saves')
                     .insert([{ username: user, password: pass, save_data: initialSaveData }]);
 
@@ -358,7 +358,7 @@
                 window.currentUsername = user;
             } else {
                 // 1. 從雲端資料庫抓取帳號資料
-                const { data, error } = await supabase
+                const { data, error } = await dbClient
                     .from('game_saves')
                     .select('*')
                     .eq('username', user)
