@@ -350,7 +350,19 @@
             document.getElementById('auth-submit-btn').innerText = (mode === 'register') ? '向雲端申請牌照' : '從雲端登入';
         }
 
+        // 顯示 / 隱藏密碼
+        function togglePassword() {
+            const input = document.getElementById('password-input');
+            const btn = document.getElementById('toggle-password');
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.innerText = show ? '🙈' : '👁';
+        }
+
         function backToMainMenu() {
+            // 返回時一律把密碼改回隱藏
+            document.getElementById('password-input').type = 'password';
+            document.getElementById('toggle-password').innerText = '👁';
             document.getElementById('main-menu-options').style.display = 'block';
             document.getElementById('auth-form-area').style.display = 'none';
         }
