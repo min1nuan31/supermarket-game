@@ -1,11 +1,39 @@
-// js/main.js - 完整超市模擬器核心邏輯 (含 3D 顧客與逐項點擊計價)
+// js/main.js - 超市模擬器核心邏輯
 
 import { initControls, moveDir, cameraYaw, cameraPitch } from './controls.js';
-import { updateRaycast, currentTarget, heldBox, pickUpBox, dropBox } from './interaction.js';
+import { updateRaycast, currentTarget, heldBox, pickUpBox, dropBox, discardHeldBox } from './interaction.js';
 import { openPOS, closePOS } from './pos.js';
 import { openOrderUI, closeOrderUI, addToCart, checkoutOrder } from './order.js';
 
-let money = 100.00;
+// 小工具：綁定按鈕。找不到元素時只在 console 警告，不會讓整支程式中斷
+function bind(id, handler) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn(`[main.js] 找不到元素 #${id}，已略過綁定`);
+        return;
+    }
+    el.onclick = handler;
+}
+
+// 不會卡住畫面的提示訊息 (取代 alert)
+function showToast(msg) {
+    const el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;left:50%;top:25%;transform:translateX(-50%);background:rgba(0,0,0,.8);' +
+        'color:#fff;padding:10px 18px;border-radius:14px;font-size:16px;z-index:50;pointer-events:none;' +
+        'max-width:80vw;text-align:center;';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+}
+
+const moneyText = document.getElementById('money-text');
+function setMoney(v) {
+    money = v;
+    if (moneyText) moneyText.innerText = money.toFixed(2);
+}
+
+let money = (window.playerSaveData && typeof window.playerSaveData.money === 'number')
+    ? window.playerSaveData.money : 100.00;
 let inUI = false;
 let isStoreOpen = false;         // 店鋪營業狀態
 let activeCustomer = null;       // 當前在收銀檯前的顧客物件
@@ -17,16 +45,30 @@ scene.background = new THREE.Color(0xf0f0f0);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 1.8, 5);
+scene.add(camera); // 相機必須加入場景，手上拿的紙箱 (相機的子物件) 才會被畫出來
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.DirectionalLight(0xffffff, 1).translateX(5).translateY(10));
-scene.add(new THREE.AmbientLight(0x404040));
-scene.add(new THREE.GridHelper(20, 20));
+// 燈光：Lambert 材質需要光才看得到顏色
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(5, 10, 5);
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-const loader = new THREE.GLTFLoader();
+// 地板 + 格線
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshLambertMaterial({ color: 0xdcdcdc })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+const grid = new THREE.GridHelper(20, 20, 0x999999, 0xbbbbbb);
+grid.position.y = 0.01;
+scene.add(grid);
+
 const interactables = [];
 
 // 2. 放置核心店面物件
@@ -74,8 +116,8 @@ spawnBox("牛奶箱", 0, 0);
 initControls();
 
 // 4. 按鈕互動事件
-document.getElementById('btn-interact').onclick = () => {
-    if (!currentTarget) return;
+bind('btn-interact', () => {
+    if (inUI || !currentTarget) return;
     const { type, object } = currentTarget;
 
     if (type === "box" && !heldBox) {
@@ -84,21 +126,23 @@ document.getElementById('btn-interact').onclick = () => {
         if (heldBox.userData.itemsLeft > 0) {
             heldBox.userData.itemsLeft--;
             shelfMesh.userData.stockedCount++;
+            showToast(`已上架 ${heldBox.userData.itemName}，貨架庫存 ${shelfMesh.userData.stockedCount}`);
+            if (heldBox.userData.itemsLeft === 0) {
+                discardHeldBox(camera); // 紙箱空了，自動丟掉
+            }
         }
     } else if (type === "sign") {
         isStoreOpen = !isStoreOpen;
         signMesh.material.color.set(isStoreOpen ? 0x00ff00 : 0xff0000);
-        alert(isStoreOpen ? "🟢 超市已開門營業！" : "🔴 超市已打烊。");
+        showToast(isStoreOpen ? "🟢 超市已開門營業！" : "🔴 超市已打烊。");
     } else if (type === "counter") {
         if (customerQueueItems.length === 0) {
-            alert("收銀檯目前沒有顧客放置商品！");
+            showToast("收銀檯目前沒有顧客放置商品！");
             return;
         }
-        // 走向收銀檯按下 E $\rightarrow$ 進入收銀特寫畫面（帶入顧客帶來的多樣商品）
         inUI = true;
         openPOS(customerQueueItems, (earned) => {
-            money += earned;
-            document.getElementById('money-text').innerText = money.toFixed(2);
+            setMoney(money + earned);
 
             // 結帳完成，移除 3D 顧客模型
             if (activeCustomer) {
@@ -112,22 +156,21 @@ document.getElementById('btn-interact').onclick = () => {
         inUI = true;
         openOrderUI();
     }
-};
+});
 
-document.getElementById('btn-drop').onclick = () => dropBox(camera, scene, interactables);
+bind('btn-drop', () => dropBox(camera, scene, interactables));
 
 // 電腦選單事件綁定
-document.getElementById('btn-buy-milk').onclick = () => addToCart('牛奶箱', 20);
-document.getElementById('btn-buy-chips').onclick = () => addToCart('洋芋片箱', 15);
-document.getElementById('btn-buy-drink').onclick = () => addToCart('飲料箱', 18);
-document.getElementById('btn-order-checkout').onclick = () => {
-    money = checkoutOrder(money, spawnBox);
-    document.getElementById('money-text').innerText = money.toFixed(2);
-};
-document.getElementById('btn-close-order').onclick = () => { closeOrderUI(); inUI = false; };
-document.getElementById('btn-close-pos').onclick = () => { closePOS(); inUI = false; };
+bind('btn-buy-milk', () => addToCart('牛奶箱', 20));
+bind('btn-buy-chips', () => addToCart('洋芋片箱', 15));
+bind('btn-buy-drink', () => addToCart('飲料箱', 18));
+bind('btn-order-checkout', () => {
+    setMoney(checkoutOrder(money, spawnBox));
+});
+bind('btn-close-order', () => { closeOrderUI(); inUI = false; });
+bind('btn-close-pos', () => { closePOS(); inUI = false; });
 
-// 5. 顧客生成與走動邏輯
+// 5. 顧客生成邏輯
 let customerTimer = 0;
 function updateCustomers(delta) {
     if (!isStoreOpen || activeCustomer !== null) return;
@@ -137,34 +180,39 @@ function updateCustomers(delta) {
         customerTimer = 0;
         shelfMesh.userData.stockedCount--;
 
-        // 建立一個 3D 顧客模型 (用紅色/粉色膠囊或方塊代表)
-        const customerGeo = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
-        const customerMat = new THREE.MeshLambertMaterial({ color: 0xff6699 });
-        activeCustomer = new THREE.Mesh(customerGeo, customerMat);
-        activeCustomer.position.set(2, 0.9, 3); // 從店門口出現
-        scene.add(activeCustomer);
+        // 3D 顧客模型 (膠囊體)。r128 沒有 CapsuleGeometry，改用圓柱 + 球組合
+        const customer = new THREE.Group();
+        const mat = new THREE.MeshLambertMaterial({ color: 0xff6699 });
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 12), mat);
+        body.position.y = 0;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 12), mat);
+        head.position.y = 0.8;
+        customer.add(body, head);
+        customer.position.set(2, 0.6, 3);
+        scene.add(customer);
+        activeCustomer = customer;
 
         // 隨機讓顧客選購 1 到 3 件商品放在收銀檯上
         const itemCount = Math.floor(Math.random() * 3) + 1;
+        const prices = [10, 15, 20, 25, 30];
         customerQueueItems = [];
         for (let i = 0; i < itemCount; i++) {
-            const prices = [10, 15, 20, 25, 30];
             const p = prices[Math.floor(Math.random() * prices.length)];
             customerQueueItems.push({ name: `商品 #${i + 1}`, price: p });
         }
 
-        alert("🔔 有顧客走到收銀檯前，將商品放上了櫃台！快去收銀檯按 E 幫他結帳。");
+        showToast("🔔 有顧客把商品放上櫃台了！去收銀檯按互動幫他結帳。");
     }
 }
 
 // 6. 遊戲主循環
-let clock = new THREE.Clock();
+const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
-    const delta = clock.getDelta();
+    const delta = Math.min(clock.getDelta(), 0.1);
 
     if (!inUI) {
-        const speed = 0.08;
+        const speed = 4.5 * delta;
         const forwardX = -Math.sin(cameraYaw);
         const forwardZ = -Math.cos(cameraYaw);
         const rightX = Math.cos(cameraYaw);
@@ -172,6 +220,9 @@ function animate() {
 
         camera.position.x += (forwardX * (-moveDir.y) + rightX * moveDir.x) * speed;
         camera.position.z += (forwardZ * (-moveDir.y) + rightZ * moveDir.x) * speed;
+        // 限制在場地範圍內
+        camera.position.x = Math.max(-9.5, Math.min(9.5, camera.position.x));
+        camera.position.z = Math.max(-9.5, Math.min(9.5, camera.position.z));
 
         camera.quaternion.setFromEuler(new THREE.Euler(cameraPitch, cameraYaw, 0, 'YXZ'));
 

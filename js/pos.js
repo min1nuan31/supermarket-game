@@ -1,4 +1,4 @@
-// js/pos.js - POS 收銀結帳系統 (包含刷卡九宮格與付現找零機制)
+// js/pos.js - POS 收銀結帳系統 (刷卡九宮格 + 付現找零)
 
 let currentTotal = 0;
 let paymentMethod = 'card'; // 'card' 或 'cash'
@@ -8,17 +8,19 @@ let changeNeeded = 0;       // 需要找給顧客的金額
 let changeGiven = 0;        // 玩家目前已經找的金額
 let onCheckoutSuccessCallback = null;
 
-export function openPOS(onFinishCheckout) {
+// items: [{ name, price }, ...]  顧客放在櫃台上的商品；總額由商品加總而來
+export function openPOS(items, onFinishCheckout) {
     onCheckoutSuccessCallback = onFinishCheckout;
     document.getElementById('pos-ui').style.display = 'flex';
 
-    // 1. 隨機生成結帳總金額 ($5 ~ $100)
-    currentTotal = (Math.floor(Math.random() * 20) + 1) * 5;
+    // 1. 結帳總金額 = 商品價格加總
+    currentTotal = (items || []).reduce((sum, it) => sum + it.price, 0);
 
     // 2. 隨機選擇付款方式 (刷卡 50% / 付現 50%)
     paymentMethod = Math.random() > 0.5 ? 'card' : 'cash';
 
-    document.getElementById('pos-total').innerText = `總計: $${currentTotal}.00`;
+    const itemLines = (items || []).map(it => `${it.name} $${it.price}`).join('、');
+    document.getElementById('pos-total').innerText = `總計: $${currentTotal}.00　(${itemLines})`;
     document.getElementById('pos-mode').innerText = `付款方式: ${paymentMethod === 'card' ? '💳 刷卡' : '💵 現金'}`;
 
     // 3. 根據付款方式渲染對應介面
@@ -65,9 +67,10 @@ window.posKeypad = function (val) {
     if (val === 'C') {
         cardInput = "";
     } else if (val === 'OK') {
-        if (parseInt(cardInput || "0") === currentTotal) {
+        if (parseInt(cardInput || "0", 10) === currentTotal) {
             alert('💳 刷卡成功！');
             finishTransaction();
+            return;
         } else {
             alert(`❌ 金額不正確！需要刷卡金額為 $${currentTotal}`);
             cardInput = "";
@@ -79,12 +82,18 @@ window.posKeypad = function (val) {
 };
 
 // ==========================================
-// B. 付現模式：找零（Zhao）機制介面
+// B. 付現模式：找零機制介面
 // ==========================================
 function setupCashUI() {
-    // 顧客給的錢會是大於或等於總額的整數鈔票 (例如：$100、$50、或恰好)
-    const options = [currentTotal, currentTotal + 5, currentTotal + 10, currentTotal + 50, 100];
-    cashGiven = options.filter(v => v >= currentTotal)[Math.floor(Math.random() * (options.filter(v => v >= currentTotal).length))];
+    // 顧客給的錢：剛好、湊整到 10 / 50 / 100 的鈔票 (一定 >= 總額)
+    const roundUp = (n, base) => Math.ceil(n / base) * base;
+    const options = [...new Set([
+        currentTotal,
+        roundUp(currentTotal, 10),
+        roundUp(currentTotal, 50),
+        roundUp(currentTotal, 100)
+    ])].filter(v => v >= currentTotal);
+    cashGiven = options[Math.floor(Math.random() * options.length)];
     changeNeeded = cashGiven - currentTotal;
     changeGiven = 0;
 
@@ -102,7 +111,6 @@ function updateCashUI() {
         </div>
 
         <div style="margin-bottom: 10px; font-size: 14px; color: #aaa;">點擊面額找錢給顧客：</div>
-        <!-- 找零面額按鈕 -->
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;">
             <button class="modal-btn" style="background:#ff9900; color:black; padding:8px;" onclick="window.addChange(1)">+$1</button>
             <button class="modal-btn" style="background:#ff9900; color:black; padding:8px;" onclick="window.addChange(5)">+$5</button>
@@ -117,7 +125,6 @@ function updateCashUI() {
     `;
 }
 
-// 找錢面額按鈕邏輯
 window.addChange = function (amount) {
     changeGiven += amount;
     updateCashUI();
@@ -141,10 +148,10 @@ window.confirmChange = function () {
 
 // 完成交易並發放收益
 function finishTransaction() {
+    closePOS();
     if (onCheckoutSuccessCallback) {
         onCheckoutSuccessCallback(currentTotal);
     }
-    closePOS();
 }
 
 export function closePOS() {
