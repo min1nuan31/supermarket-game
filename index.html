@@ -286,6 +286,12 @@
                 <button id="btn-buy-chips" class="modal-btn"
                     style="background:#0055ff; color:white; width:auto; padding:5px 10px;">+ 加入</button>
             </div>
+            <div class="order-item"
+                style="display:flex; justify-content:space-between; margin:8px 0; background:#333; padding:8px; border-radius:6px;">
+                <span>飲料箱 (5入) - $18</span>
+                <button id="btn-buy-drink" class="modal-btn"
+                    style="background:#0055ff; color:white; width:auto; padding:5px 10px;">+ 加入</button>
+            </div>
             <div id="cart-list"
                 style="background:#111; padding:8px; border-radius:6px; font-size:14px; color:#aaa; margin-top:8px; text-align:left;">
                 已選清單: 無</div>
@@ -294,6 +300,35 @@
             <button id="btn-close-order" class="modal-btn" style="background:#888; color:white;">關閉電腦</button>
         </div>
     </div>
+
+    <!-- 除錯用：程式出錯或檔案載入失敗時，在畫面頂端顯示紅色錯誤條 (手機上看不到 Console 時很好用) -->
+    <script>
+        (function () {
+            function showError(msg) {
+                var bar = document.getElementById('debug-error-bar');
+                if (!bar) {
+                    bar = document.createElement('div');
+                    bar.id = 'debug-error-bar';
+                    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;' +
+                        'background:rgba(180,0,0,.92);color:#fff;font:12px/1.4 monospace;padding:8px;z-index:9999;' +
+                        'white-space:pre-wrap;user-select:text;pointer-events:auto;';
+                    document.body.appendChild(bar);
+                }
+                bar.textContent += msg + '\n';
+            }
+            // 第三個參數 true = 捕獲階段，才抓得到 <script src> 載入失敗 (404)
+            window.addEventListener('error', function (e) {
+                if (e.target && e.target !== window && (e.target.src || e.target.href)) {
+                    showError('載入失敗: ' + (e.target.src || e.target.href));
+                } else {
+                    showError('錯誤: ' + e.message + (e.filename ? '\n  @ ' + e.filename + ':' + e.lineno : ''));
+                }
+            }, true);
+            window.addEventListener('unhandledrejection', function (e) {
+                showError('Promise 錯誤: ' + (e.reason && e.reason.message || e.reason));
+            });
+        })();
+    </script>
 
     <!-- 雲端與登入邏輯 -->
     <script>
