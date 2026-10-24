@@ -239,7 +239,12 @@
             <!-- 帳密輸入表單 (預設隱藏) -->
             <div id="auth-form-area" style="display: none;">
                 <input type="text" id="username-input" class="modal-input" placeholder="請輸入 User name (帳號)">
-                <input type="password" id="password-input" class="modal-input" placeholder="請輸入密碼">
+                <div style="position: relative;">
+                    <input type="password" id="password-input" class="modal-input" placeholder="請輸入密碼"
+                        style="padding-right: 48px;">
+                    <button type="button" id="toggle-password" onclick="togglePassword()" aria-label="顯示或隱藏密碼"
+                        style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #aaa; font-size: 20px; cursor: pointer; padding: 6px;">👁</button>
+                </div>
                 <button id="auth-submit-btn" class="modal-btn" style="background: #00aa00; color: white;"
                     onclick="submitAuth()">確認送出</button>
                 <button class="modal-btn" style="background: #666; color: white;" onclick="backToMainMenu()">返回</button>
